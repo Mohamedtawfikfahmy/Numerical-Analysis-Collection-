@@ -1,0 +1,636 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numerical Interpolation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+    <style>
+        body{
+            background-color: #000;
+        }
+        .card {
+            padding: 20px;
+            width: 90%;
+            max-width: 550px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 20px auto;
+            background-color: #000;
+            color: #fff;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 20px;
+            color: #fff;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .methods {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .method-btn {
+            background-color: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.3s;
+            text-decoration: none;
+            color: #333;
+            display: block;
+        }
+
+        .method-btn:hover {
+            background-color: #e0e0e0;
+        }
+
+        .input-section {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        button.calculate {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button.calculate:hover {
+            background-color: #45a049;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            color: #000;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .syntax-help {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: center;
+            color: #fff;
+        }
+
+        th {
+            background-color: #000;
+        }
+
+        .toggle-table {
+            color: #4CAF50;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .iteration-table {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .data-check {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .data-valid {
+            background-color: #e6f7e6;
+            color: #2e7d32;
+        }
+
+        .data-invalid {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(0,0,0,.3);
+            border-radius: 50%;
+            border-top-color: #000;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 5px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            table {
+                font-size: 10px;
+            }
+            th, td {
+                padding: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>NUMERICAL INTERPOLATION</h2>
+        <div class="methods">
+            <a class="method-btn" data-method="lagrange">Lagrange Interpolation</a>
+            <a class="method-btn" data-method="newton-forward">Newton Forward Interpolation</a>
+            <a class="method-btn" data-method="newton-backward">Newton Backward Interpolation</a>
+        </div>
+
+        <div id="lagrange-input" class="input-section">
+            <h3>Lagrange Interpolation</h3>
+            <div class="input-group">
+                <label for="lagrange-points">Data Points (x,y pairs, one per line):</label>
+                <textarea id="lagrange-points" placeholder="e.g.,&#10;0,1&#10;1,2&#10;2,4"></textarea>
+                <div class="syntax-help">Enter x,y pairs separated by commas, one pair per line.</div>
+            </div>
+            <div class="input-group">
+                <label for="lagrange-x">Interpolation Point (x):</label>
+                <input type="number" id="lagrange-x" placeholder="0.5" step="any">
+            </div>
+            <div id="lagrange-data-check" class="data-check">
+                Checking data validity...
+            </div>
+            <button class="calculate" onclick="calculateLagrange()">Calculate</button>
+            <div id="lagrange-result" class="result"></div>
+            <div id="lagrange-table" class="iteration-table"></div>
+        </div>
+
+        <div id="newton-forward-input" class="input-section">
+            <h3>Newton Forward Interpolation</h3>
+            <div class="input-group">
+                <label for="newton-forward-points">Data Points (x,y pairs, one per line):</label>
+                <textarea id="newton-forward-points" placeholder="e.g.,&#10;0,1&#10;1,2&#10;2,4"></textarea>
+                <div class="syntax-help">Enter x,y pairs separated by commas, one pair per line. Points must be equally spaced in x.</div>
+            </div>
+            <div class="input-group">
+                <label for="newton-forward-x">Interpolation Point (x):</label>
+                <input type="number" id="newton-forward-x" placeholder="0.5" step="any">
+            </div>
+            <div id="newton-forward-data-check" class="data-check">
+                Checking data validity...
+            </div>
+            <button class="calculate" onclick="calculateNewtonForward()">Calculate</button>
+            <div id="newton-forward-result" class="result"></div>
+            <div id="newton-forward-table" class="iteration-table"></div>
+        </div>
+
+        <div id="newton-backward-input" class="input-section">
+            <h3>Newton Backward Interpolation</h3>
+            <div class="input-group">
+                <label for="newton-backward-points">Data Points (x,y pairs, one per line):</label>
+                <textarea id="newton-backward-points" placeholder="e.g.,&#10;0,1&#10;1,2&#10;2,4"></textarea>
+                <div class="syntax-help">Enter x,y pairs separated by commas, one pair per line. Points must be equally spaced in x.</div>
+            </div>
+            <div class="input-group">
+                <label for="newton-backward-x">Interpolation Point (x):</label>
+                <input type="number" id="newton-backward-x" placeholder="0.5" step="any">
+            </div>
+            <div id="newton-backward-data-check" class="data-check">
+                Checking data validity...
+            </div>
+            <button class="calculate" onclick="calculateNewtonBackward()">Calculate</button>
+            <div id="newton-backward-result" class="result"></div>
+            <div id="newton-backward-table" class="iteration-table"></div>
+        </div>
+    </div>
+
+    <script>
+        // Show the selected method's input section
+        document.querySelectorAll('.method-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const method = this.getAttribute('data-method');
+                
+                // Hide all input sections
+                document.querySelectorAll('.input-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                // Hide all results and tables
+                document.querySelectorAll('.result, .iteration-table, .data-check').forEach(el => {
+                    el.style.display = 'none';
+                });
+                
+                // Show the selected input section
+                document.getElementById(`${method}-input`).style.display = 'block';
+            });
+        });
+
+        function parsePoints(inputStr) {
+            const lines = inputStr.trim().split('\n').filter(line => line.trim() !== '');
+            const points = lines.map(line => {
+                const [x, y] = line.split(',').map(val => parseFloat(val.trim()));
+                return { x, y };
+            });
+            return points.filter(point => !isNaN(point.x) && !isNaN(point.y));
+        }
+
+        function validatePoints(points, checkEqualSpacing = false) {
+            if (points.length < 2) return { valid: false, message: 'At least 2 valid points are required.' };
+            const xValues = points.map(p => p.x);
+            if (new Set(xValues).size !== xValues.length) {
+                return { valid: false, message: 'Duplicate x values are not allowed.' };
+            }
+            if (checkEqualSpacing) {
+                const h = xValues[1] - xValues[0];
+                for (let i = 1; i < xValues.length - 1; i++) {
+                    if (Math.abs((xValues[i + 1] - xValues[i]) - h) > 1e-10) {
+                        return { valid: false, message: 'X values must be equally spaced.' };
+                    }
+                }
+            }
+            return { valid: true, message: 'Valid data points.' };
+        }
+
+        function toggleTable(tableId) {
+            const table = document.getElementById(tableId);
+            table.style.display = table.style.display === 'block' ? 'none' : 'block';
+        }
+
+        // Check data validity for Lagrange
+        function checkLagrangeData() {
+            const pointsStr = document.getElementById('lagrange-points').value;
+            const xVal = parseFloat(document.getElementById('lagrange-x').value);
+            const checkDiv = document.getElementById('lagrange-data-check');
+            
+            if (!pointsStr || isNaN(xVal)) {
+                checkDiv.style.display = 'none';
+                return;
+            }
+            
+            const points = parsePoints(pointsStr);
+            const validation = validatePoints(points);
+            
+            checkDiv.style.display = 'block';
+            checkDiv.className = validation.valid ? 'data-check data-valid' : 'data-check data-invalid';
+            checkDiv.innerHTML = validation.message;
+        }
+
+        // Lagrange Interpolation Calculation
+        function calculateLagrange() {
+            const pointsStr = document.getElementById('lagrange-points').value;
+            const xVal = parseFloat(document.getElementById('lagrange-x').value);
+            const resultDiv = document.getElementById('lagrange-result');
+            const tableDiv = document.getElementById('lagrange-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            const points = parsePoints(pointsStr);
+            const validation = validatePoints(points);
+            
+            if (!validation.valid) {
+                alert(validation.message);
+                return;
+            }
+            
+            if (isNaN(xVal)) {
+                alert('Please provide a valid interpolation point (x).');
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                let sum = 0;
+                let tableHTML = '<table><tr><th>i</th><th>x</th><th>y</th><th>L_i(x)</th></tr>';
+                
+                for (let i = 0; i < points.length; i++) {
+                    let li = 1;
+                    for (let j = 0; j < points.length; j++) {
+                        if (i !== j) {
+                            li *= (xVal - points[j].x) / (points[i].x - points[j].x);
+                        }
+                    }
+                    sum += li * points[i].y;
+                    tableHTML += `<tr><td>${i}</td><td>${points[i].x.toFixed(6)}</td><td>${points[i].y.toFixed(6)}</td><td>${li.toFixed(6)}</td></tr>`;
+                }
+                
+                tableHTML += '</table>';
+                
+                tableDiv.innerHTML = tableHTML;
+                resultDiv.innerHTML = `
+                    <strong>Interpolated value at x = ${xVal}:</strong> ${sum.toFixed(6)}<br>
+                   
+                    <span class="toggle-table" onclick="toggleTable('lagrange-table')">Show basis functions table</span>
+                `;
+                resultDiv.style.display = 'block';
+            }, 10);
+        }
+
+        // Check data validity for Newton Forward
+        function checkNewtonForwardData() {
+            const pointsStr = document.getElementById('newton-forward-points').value;
+            const xVal = parseFloat(document.getElementById('newton-forward-x').value);
+            const checkDiv = document.getElementById('newton-forward-data-check');
+            
+            if (!pointsStr || isNaN(xVal)) {
+                checkDiv.style.display = 'none';
+                return;
+            }
+            
+            const points = parsePoints(pointsStr);
+            const validation = validatePoints(points, true);
+            
+            checkDiv.style.display = 'block';
+            checkDiv.className = validation.valid ? 'data-check data-valid' : 'data-check data-invalid';
+            checkDiv.innerHTML = validation.message;
+        }
+
+        // Newton Forward Interpolation Calculation
+        function calculateNewtonForward() {
+            const pointsStr = document.getElementById('newton-forward-points').value;
+            const xVal = parseFloat(document.getElementById('newton-forward-x').value);
+            const resultDiv = document.getElementById('newton-forward-result');
+            const tableDiv = document.getElementById('newton-forward-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            const points = parsePoints(pointsStr);
+            const validation = validatePoints(points, true);
+            
+            if (!validation.valid) {
+                alert(validation.message);
+                return;
+            }
+            
+            if (isNaN(xVal)) {
+                alert('Please provide a valid interpolation point (x).');
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                const n = points.length;
+                const x0 = points[0].x;
+                const h = points[1].x - points[0].x;
+                const s = (xVal - x0) / h;
+                
+                // Calculate divided differences
+                const y = points.map(p => p.y);
+                const diffTable = [y.slice()];
+                for (let i = 1; i < n; i++) {
+                    const prev = diffTable[i - 1];
+                    const diff = [];
+                    for (let j = 0; j < n - i; j++) {
+                        diff.push(prev[j + 1] - prev[j]);
+                    }
+                    diffTable.push(diff);
+                }
+                
+                // Calculate interpolated value
+                let result = y[0];
+                let term = 1;
+                for (let i = 1; i < n; i++) {
+                    term *= (s - (i - 1)) / i;
+                    result += term * diffTable[i][0];
+                }
+                
+                // Create difference table
+                let tableHTML = '<table><tr><th>x</th><th>y</th>';
+                for (let i = 1; i < n; i++) {
+                    tableHTML += `<th>Δ^${i}y</th>`;
+                }
+                tableHTML += '</tr>';
+                
+                for (let i = 0; i < n; i++) {
+                    tableHTML += `<tr><td>${points[i].x.toFixed(6)}</td><td>${points[i].y.toFixed(6)}</td>`;
+                    for (let j = 1; j < n - i; j++) {
+                        if (diffTable[j][i] !== undefined) {
+                            tableHTML += `<td>${diffTable[j][i].toFixed(6)}</td>`;
+                        } else {
+                            tableHTML += '<td></td>';
+                        }
+                    }
+                    for (let j = n - i; j < n; j++) {
+                        tableHTML += '<td></td>';
+                    }
+                    tableHTML += '</tr>';
+                }
+                tableHTML += '</table>';
+                
+                tableDiv.innerHTML = tableHTML;
+                resultDiv.innerHTML = `
+                    <strong>Interpolated value at x = ${xVal}:</strong> ${result.toFixed(6)}<br>
+                    <span class="toggle-table" onclick="toggleTable('newton-forward-table')">Show difference table</span>
+                `;
+                resultDiv.style.display = 'block';
+            }, 10);
+        }
+
+        // Check data validity for Newton Backward
+        function checkNewtonBackwardData() {
+            const pointsStr = document.getElementById('newton-backward-points').value;
+            const xVal = parseFloat(document.getElementById('newton-backward-x').value);
+            const checkDiv = document.getElementById('newton-backward-data-check');
+            
+            if (!pointsStr || isNaN(xVal)) {
+                checkDiv.style.display = 'none';
+                return;
+            }
+            
+            const points = parsePoints(pointsStr);
+            const validation = validatePoints(points, true);
+            
+            checkDiv.style.display = 'block';
+            checkDiv.className = validation.valid ? 'data-check data-valid' : 'data-check data-invalid';
+            checkDiv.innerHTML = validation.message;
+        }
+
+        // Newton Backward Interpolation Calculation
+        function calculateNewtonBackward() {
+            const pointsStr = document.getElementById('newton-backward-points').value;
+            const xVal = parseFloat(document.getElementById('newton-backward-x').value);
+            const resultDiv = document.getElementById('newton-backward-result');
+            const tableDiv = document.getElementById('newton-backward-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            const points = parsePoints(pointsStr);
+            const validation = validatePoints(points, true);
+            
+            if (!validation.valid) {
+                alert(validation.message);
+                return;
+            }
+            
+            if (isNaN(xVal)) {
+                alert('Please provide a valid interpolation point (x).');
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                const n = points.length;
+                const xn = points[n - 1].x;
+                const h = points[1].x - points[0].x;
+                const s = (xVal - xn) / h;
+                
+                // Calculate divided differences
+                const y = points.map(p => p.y);
+                const diffTable = [y.slice()];
+                for (let i = 1; i < n; i++) {
+                    const prev = diffTable[i - 1];
+                    const diff = [];
+                    for (let j = 0; j < n - i; j++) {
+                        diff.push(prev[j + 1] - prev[j]);
+                    }
+                    diffTable.push(diff);
+                }
+                
+                // Calculate interpolated value
+                let result = y[n - 1];
+                let term = 1;
+                for (let i = 1; i < n; i++) {
+                    term *= (s + (i - 1)) / i;
+                    result += term * diffTable[i][n - i - 1];
+                }
+                
+                // Create difference table
+                let tableHTML = '<table><tr><th>x</th><th>y</th>';
+                for (let i = 1; i < n; i++) {
+                    tableHTML += `<th>∇^${i}y</th>`;
+                }
+                tableHTML += '</tr>';
+                
+                for (let i = 0; i < n; i++) {
+                    tableHTML += `<tr><td>${points[i].x.toFixed(6)}</td><td>${points[i].y.toFixed(6)}</td>`;
+                    for (let j = 1; j < n - i; j++) {
+                        if (diffTable[j][i] !== undefined) {
+                            tableHTML += `<td>${diffTable[j][i].toFixed(6)}</td>`;
+                        } else {
+                            tableHTML += '<td></td>';
+                        }
+                    }
+                    for (let j = n - i; j < n; j++) {
+                        tableHTML += '<td></td>';
+                    }
+                    tableHTML += '</tr>';
+                }
+                tableHTML += '</table>';
+                
+                tableDiv.innerHTML = tableHTML;
+                resultDiv.innerHTML = `
+                    <strong>Interpolated value at x = ${xVal}:</strong> ${result.toFixed(6)}<br>
+                    
+                    <span class="toggle-table" onclick="toggleTable('newton-backward-table')">Show difference table</span>
+                `;
+                resultDiv.style.display = 'block';
+            }, 10);
+        }
+
+        // Initialize data checks on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('lagrange-points').addEventListener('input', checkLagrangeData);
+            document.getElementById('lagrange-x').addEventListener('input', checkLagrangeData);
+            document.getElementById('newton-forward-points').addEventListener('input', checkNewtonForwardData);
+            document.getElementById('newton-forward-x').addEventListener('input', checkNewtonForwardData);
+            document.getElementById('newton-backward-points').addEventListener('input', checkNewtonBackwardData);
+            document.getElementById('newton-backward-x').addEventListener('input', checkNewtonBackwardData);
+        });
+    </script>
+</body>
+</html>

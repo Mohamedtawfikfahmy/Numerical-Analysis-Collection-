@@ -1,0 +1,484 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numerical Differential Equations</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+    <style>
+        body{
+            background-color: #fff;
+        }
+        .card {
+            
+            padding: 20px;
+            width: 90%;
+            max-width: 550px;
+            font-family: Arial, sans-serif;
+            //box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 20px auto;
+            background-color: #fff;
+            color: #000;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 20px;
+            color: #000;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .methods {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .method-btn {
+            background-color: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.3s;
+            text-decoration: none;
+            color: #333;
+            display: block;
+        }
+
+        .method-btn:hover {
+            background-color: #e0e0e0;
+        }
+
+        .input-section {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button.calculate {
+            background-color: #000;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button.calculate:hover {
+            background-color: #2e74d0;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            color: #000;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .syntax-help {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: center;
+            color: #000;
+        }
+
+        th {
+            background-color: #fff;
+            color: #000;
+        }
+
+        .toggle-table {
+            color: #4CAF50;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .iteration-table {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(0,0,0,.3);
+            border-radius: 50%;
+            border-top-color: #000;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 5px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            table {
+                font-size: 10px;
+            }
+            th, td {
+                padding: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>NUMERICAL DIFFERENTIAL EQUATIONS</h2>
+        <div class="methods">
+            <a class="method-btn" data-method="euler">Euler Method</a>
+            <a class="method-btn" data-method="modified-euler">Modified Euler Method</a>
+        </div>
+
+        <div id="euler-input" class="input-section">
+            <h3>Euler Method</h3>
+            <div class="input-group">
+                <label for="euler-function">Differential Equation (dy/dx):</label>
+                <input type="text" id="euler-function" placeholder="e.g., -2*x*y">
+                <div class="syntax-help">Enter as f(x,y), e.g., -2*x*y for dy/dx = -2xy. Supports: +, -, *, /, ^, sin(), cos(), tan(), ln(), log(), sqrt(), e, pi</div>
+            </div>
+            <div class="input-group">
+                <label for="euler-x0">Initial x (x0):</label>
+                <input type="number" id="euler-x0" placeholder="0" step="any">
+            </div>
+            <div class="input-group">
+                <label for="euler-y0">Initial y (y0):</label>
+                <input type="number" id="euler-y0" placeholder="1" step="any">
+            </div>
+            <div class="input-group">
+                <label for="euler-xn">End x (xn):</label>
+                <input type="number" id="euler-xn" placeholder="1" step="any">
+            </div>
+            <div class="input-group">
+                <label for="euler-h">Step size (h):</label>
+                <input type="number" id="euler-h" placeholder="0.1" step="any" min="0.0001">
+            </div>
+            <button class="calculate" onclick="calculateEuler()">Calculate</button>
+            <div id="euler-result" class="result"></div>
+            <div id="euler-table" class="iteration-table"></div>
+        </div>
+
+        <div id="modified-euler-input" class="input-section">
+            <h3>Modified Euler Method</h3>
+            <div class="input-group">
+                <label for="modified-euler-function">Differential Equation (dy/dx):</label>
+                <input type="text" id="modified-euler-function" placeholder="e.g., -2*x*y">
+                <div class="syntax-help">Enter as f(x,y), e.g., -2*x*y for dy/dx = -2xy. Supports: +, -, *, /, ^, sin(), cos(), tan(), ln(), log(), sqrt(), e, pi</div>
+            </div>
+            <div class="input-group">
+                <label for="modified-euler-x0">Initial x (x0):</label>
+                <input type="number" id="modified-euler-x0" placeholder="0" step="any">
+            </div>
+            <div class="input-group">
+                <label for="modified-euler-y0">Initial y (y0):</label>
+                <input type="number" id="modified-euler-y0" placeholder="1" step="any">
+            </div>
+            <div class="input-group">
+                <label for="modified-euler-xn">End x (xn):</label>
+                <input type="number" id="modified-euler-xn" placeholder="1" step="any">
+            </div>
+            <div class="input-group">
+                <label for="modified-euler-h">Step size (h):</label>
+                <input type="number" id="modified-euler-h" placeholder="0.1" step="any" min="0.0001">
+            </div>
+            <button class="calculate" onclick="calculateModifiedEuler()">Calculate</button>
+            <div id="modified-euler-result" class="result"></div>
+            <div id="modified-euler-table" class="iteration-table"></div>
+        </div>
+    </div>
+
+    <script>
+        // Show the selected method's input section
+        document.querySelectorAll('.method-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const method = this.getAttribute('data-method');
+                
+                // Hide all input sections
+                document.querySelectorAll('.input-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                // Hide all results and tables
+                document.querySelectorAll('.result, .iteration-table').forEach(el => {
+                    el.style.display = 'none';
+                });
+                
+                // Show the selected input section
+                document.getElementById(`${method}-input`).style.display = 'block';
+            });
+        });
+
+        function evaluateFunction(funcStr, x, y) {
+            try {
+                if (!funcStr || typeof funcStr !== 'string') {
+                    throw new Error('Invalid or empty function string');
+                }
+                math.config({ number: 'number' });
+                const node = math.parse(funcStr);
+                if (!node) {
+                    throw new Error('Failed to parse function');
+                }
+                const code = node.compile();
+                return code.evaluate({ x, y, e: Math.E, pi: Math.PI });
+            } catch (error) {
+                console.error('Evaluation error:', error.message);
+                return NaN;
+            }
+        }
+
+        function validateInputs(funcStr, numbers) {
+            if (!funcStr || !funcStr.trim() || typeof funcStr !== 'string') {
+                return false;
+            }
+            if (numbers.some(n => isNaN(n) || Math.abs(n) > 1e10)) {
+                return false;
+            }
+            const validPattern = /^[a-zA-Z0-9\s+\-*/^().,sincoaltgqrpexy]+$/;
+            return validPattern.test(funcStr);
+        }
+
+        function toggleTable(tableId) {
+            const table = document.getElementById(tableId);
+            table.style.display = table.style.display === 'block' ? 'none' : 'block';
+        }
+
+        // Euler Method Calculation...........
+        function calculateEuler() {
+            const funcStr = document.getElementById('euler-function').value;
+            const x0 = parseFloat(document.getElementById('euler-x0').value);
+            const y0 = parseFloat(document.getElementById('euler-y0').value);
+            const xn = parseFloat(document.getElementById('euler-xn').value);
+            const h = parseFloat(document.getElementById('euler-h').value);
+            const resultDiv = document.getElementById('euler-result');
+            const tableDiv = document.getElementById('euler-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            if (!validateInputs(funcStr, [x0, y0, xn, h]) || h <= 0) {
+                alert('Please provide a valid function, numerical inputs, and step size (h > 0).');
+                return;
+            }
+            
+            if (x0 >= xn) {
+                alert('Initial x (x0) must be less than end x (xn).');
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                let x = x0;
+                let y = y0;
+                let steps = Math.ceil((xn - x0) / h);
+                let tableHTML = '<table><tr><th>xₙ</th><th>yₙ</th><th>h × f(xₙ, yₙ)</th></tr>';
+                
+                let dydx = evaluateFunction(funcStr, x, y);
+                if (isNaN(dydx)) {
+                    resultDiv.innerHTML = 'Error: Could not evaluate the function at x = ' + x.toFixed(6);
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+                let h_dydx = h * dydx;
+                tableHTML += `<tr><td>${x.toFixed(6)}</td><td>${y.toFixed(6)}</td><td>${h_dydx.toFixed(6)}</td></tr>`;
+                
+                for (let i = 1; i <= steps; i++) {
+                    y += h_dydx;
+                    x += h;
+                    if (x > xn + h / 2) {
+                        x = xn;
+                        break;
+                    }
+                    dydx = evaluateFunction(funcStr, x, y);
+                    if (isNaN(dydx)) {
+                        resultDiv.innerHTML = 'Error: Could not evaluate the function at x = ' + x.toFixed(6);
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                    h_dydx = h * dydx;
+                    tableHTML += `<tr><td>${x.toFixed(6)}</td><td>${y.toFixed(6)}</td><td>${h_dydx.toFixed(6)}</td></tr>`;
+                }
+                
+                tableHTML += '</table>';
+                
+                tableDiv.innerHTML = tableHTML;
+                resultDiv.innerHTML = `
+                    <strong>Final y at x = ${x.toFixed(6)}:</strong> ${y.toFixed(6)}<br>
+                    <strong>Step size (h):</strong> ${h.toFixed(6)}<br>
+                    <strong>Steps:</strong> ${steps}<br>
+                    <span class="toggle-table" onclick="toggleTable('euler-table')">Show iteration table</span>
+                `;
+                resultDiv.style.display = 'block';
+            }, 10);
+        }
+
+        // Modified Euler Method Calculation
+        function calculateModifiedEuler() {
+            const funcStr = document.getElementById('modified-euler-function').value;
+            const x0 = parseFloat(document.getElementById('modified-euler-x0').value);
+            const y0 = parseFloat(document.getElementById('modified-euler-y0').value);
+            const xn = parseFloat(document.getElementById('modified-euler-xn').value);
+            const h = parseFloat(document.getElementById('modified-euler-h').value);
+            const resultDiv = document.getElementById('modified-euler-result');
+            const tableDiv = document.getElementById('modified-euler-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            if (!validateInputs(funcStr, [x0, y0, xn, h]) || h <= 0) {
+                alert('Please provide a valid function, numerical inputs, and step size (h > 0).');
+                return;
+            }
+            
+            if (x0 >= xn) {
+                alert('Initial x (x0) must be less than end x (xn).');
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                let x = x0;
+                let y = y0;
+                let steps = Math.ceil((xn - x0) / h);
+                let tableHTML = '<table><tr><th>xₙ</th><th>yₙ</th><th>f(xₙ, yₙ)</th><th>yₙ₊₁⁽¹⁾</th><th>f(xₙ₊₁, yₙ₊₁⁽¹⁾)</th></tr>';
+                
+                for (let i = 0; i < steps; i++) {
+                    let dydx1 = evaluateFunction(funcStr, x, y);
+                    if (isNaN(dydx1)) {
+                        resultDiv.innerHTML = 'Error: Could not evaluate the function at x = ' + x.toFixed(6);
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    let x_next = x + h;
+                    let y_predict = y + h * dydx1;
+                    let dydx2 = evaluateFunction(funcStr, x_next, y_predict);
+                    if (isNaN(dydx2)) {
+                        resultDiv.innerHTML = 'Error: Could not evaluate the function at x = ' + x_next.toFixed(6);
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    tableHTML += `<tr><td>${x.toFixed(6)}</td><td>${y.toFixed(6)}</td><td>${dydx1.toFixed(6)}</td><td>${y_predict.toFixed(6)}</td><td>${dydx2.toFixed(6)}</td></tr>`;
+                    
+                    y = y + (h / 2) * (dydx1 + dydx2);
+                    x = x_next;
+                }
+                
+                // Add the final row with all columns computed
+                let dydx1 = evaluateFunction(funcStr, x, y);
+                if (isNaN(dydx1)) {
+                    resultDiv.innerHTML = 'Error: Could not evaluate the function at x = ' + x.toFixed(6);
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+                let x_next = x + h;
+                let y_predict = y + h * dydx1;
+                let dydx2 = evaluateFunction(funcStr, x_next, y_predict);
+                if (isNaN(dydx2)) {
+                    resultDiv.innerHTML = 'Error: Could not evaluate the function at x = ' + x_next.toFixed(6);
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+                tableHTML += `<tr><td>${x.toFixed(6)}</td><td>${y.toFixed(6)}</td><td>${dydx1.toFixed(6)}</td><td>${y_predict.toFixed(6)}</td><td>${dydx2.toFixed(6)}</td></tr>`;
+                
+                tableHTML += '</table>';
+                
+                tableDiv.innerHTML = tableHTML;
+                resultDiv.innerHTML = `
+                    <strong>Final y at x = ${x.toFixed(6)}:</strong> ${y.toFixed(6)}<br>
+                    <strong>Step size (h):</strong> ${h.toFixed(6)}<br>
+                    <strong>Steps:</strong> ${steps}<br>
+                    <span class="toggle-table" onclick="toggleTable('modified-euler-table')">Show iteration table</span>
+                `;
+                resultDiv.style.display = 'block';
+            }, 10);
+        }
+    </script>
+</body>
+</html>

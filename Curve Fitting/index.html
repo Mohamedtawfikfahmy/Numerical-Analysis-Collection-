@@ -1,0 +1,563 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Curve Fitting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            direction: ltr;
+            text-align: left;
+            background-color: #000;
+        }
+        h1, h2 {
+            color: #fff;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            color: #fff;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 300px;
+            padding: 5px;
+            margin: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            color: #fff;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+
+        }
+        th {
+            background-color: #f2f2f2;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Curve Fitting</h1>
+
+    <div class="section">
+        <h2>Input Data</h2>
+        <div class="input-group">
+            <label>Data Points (x,y):</label>
+            <textarea id="dataPoints" rows="5" placeholder="Enter points as: x1,y1; x2,y2; ..."></textarea>
+            <br>
+            <small>Example: 1,2; 2,4; 3,6</small>
+        </div>
+        <div class="input-group">
+            <label>Select Equation Type:</label>
+            <select id="equationType">
+                <option value="linear">y = ax + b</option>
+                <option value="exponential">y = a * e^(bx)</option>
+                <option value="power">y = a * x^b</option>
+                <option value="hyperbolic">y = n / (ax + b)</option>
+                <option value="shiftedPower">y = a * (x + n)^b</option>
+                <option value="shiftedPowerOffset">y = a * (x + n)^b - m</option>
+                <option value="cubic">y = ax^3 + bx^2 + cx</option>
+                <option value="quadratic">y = ax^2 + bx + c</option>
+                <option value="expShift">y = e^(ax) + b</option>
+            </select>
+        </div>
+        <button onclick="calculateFit()">Calculate</button>
+    </div>
+
+    <div class="section" id="results" style="display: none;">
+        <h2>Results</h2>
+        <p id="equationResult"></p>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>x</th>
+                    <th>y (Actual)</th>
+                    
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        function parseDataPoints(input) {
+            const points = input.split(';').map(p => p.trim().split(',').map(Number));
+            return points.filter(p => p.length === 2 && !isNaN(p[0]) && !isNaN(p[1]));
+        }
+
+        function calculateFit() {
+            const dataPoints = parseDataPoints(document.getElementById('dataPoints').value);
+            const equationType = document.getElementById('equationType').value;
+
+            if (dataPoints.length < 2) {
+                alert('Enter at least two points!');
+                return;
+            }
+
+            let result;
+            switch (equationType) {
+                case 'linear':
+                    result = fitLinear(dataPoints);
+                    break;
+                case 'exponential':
+                    result = fitExponential(dataPoints);
+                    break;
+                case 'power':
+                    result = fitPower(dataPoints);
+                    break;
+                case 'hyperbolic':
+                    result = fitHyperbolic(dataPoints);
+                    break;
+                case 'shiftedPower':
+                    result = fitShiftedPower(dataPoints);
+                    break;
+                case 'shiftedPowerOffset':
+                    result = fitShiftedPowerOffset(dataPoints);
+                    break;
+                case 'cubic':
+                    result = fitCubic(dataPoints);
+                    break;
+                case 'quadratic':
+                    result = fitQuadratic(dataPoints);
+                    break;
+                case 'expShift':
+                    result = fitExpShift(dataPoints);
+                    break;
+            }
+
+            displayResults(dataPoints, result);
+        }
+//Equations
+        function fitLinear(points) {
+            const n = points.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            for (const [x, y] of points) {
+                sumX += x;
+                sumY += y;
+                sumXY += x * y;
+                sumX2 += x * x;
+            }
+            const a = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const b = (sumY - a * sumX) / n;
+            return { a, b, predict: x => a * x + b };
+        }
+
+        function fitExponential(points) {
+            const n = points.length;
+            let sumX = 0, sumLnY = 0, sumXLnY = 0, sumX2 = 0;
+            for (const [x, y] of points) {
+                if (y <= 0) continue;
+                sumX += x;
+                sumLnY += Math.log(y);
+                sumXLnY += x * Math.log(y);
+                sumX2 += x * x;
+            }
+            const b = (n * sumXLnY - sumX * sumLnY) / (n * sumX2 - sumX * sumX);
+            const lnA = (sumLnY - b * sumX) / n;
+            const a = Math.exp(lnA);
+            return { a, b, predict: x => a * Math.exp(b * x) };
+        }
+
+        function fitPower(points) {
+            const n = points.length;
+            let sumLnX = 0, sumLnY = 0, sumLnXLnY = 0, sumLnX2 = 0;
+            for (const [x, y] of points) {
+                if (x <= 0 || y <= 0) continue;
+                sumLnX += Math.log(x);
+                sumLnY += Math.log(y);
+                sumLnXLnY += Math.log(x) * Math.log(y);
+                sumLnX2 += Math.log(x) ** 2;
+            }
+            const b = (n * sumLnXLnY - sumLnX * sumLnY) / (n * sumLnX2 - sumLnX * sumLnX);
+            const lnA = (sumLnY - b * sumLnX) / n;
+            const a = Math.exp(lnA);
+            return { a, b, predict: x => a * Math.pow(x, b) };
+        }
+
+        function fitHyperbolic(points) {
+            const n = points.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            for (const [x, y] of points) {
+                if (y === 0) continue;
+                const invY = 1 / y;
+                sumX += x;
+                sumY += invY;
+                sumXY += x * invY;
+                sumX2 += x * x;
+            }
+            const a = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const b = (sumY - a * sumX) / n;
+            const nVal = 1 / a;
+            return { n: nVal, a, b, predict: x => nVal / (a * x + b) };
+        }
+
+        function fitShiftedPower(points) {
+            // Initial guess: a=1, n=0, b=1
+            let params = [1, 0, 1];
+            const maxIterations = 100;
+            const tolerance = 1e-6;
+
+            for (let iter = 0; iter < maxIterations; iter++) {
+                let J = [], r = [], newParams = [];
+                for (const [x, y] of points) {
+                    const [a, n, b] = params;
+                    const pred = a * Math.pow(x + n, b);
+                    const residual = y - pred;
+                    r.push(residual);
+
+                    // Partial derivatives
+                    const da = Math.pow(x + n, b);
+                    const dn = a * b * Math.pow(x + n, b - 1);
+                    const db = a * Math.pow(x + n, b) * Math.log(x + n + 1e-10);
+                    J.push([da, dn, db]);
+                }
+
+                // Solve J^T J delta = J^T r using simplified normal equations
+                const JTJ = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+                const JTr = [0, 0, 0];
+                for (let i = 0; i < points.length; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        for (let k = 0; k < 3; k++) {
+                            JTJ[j][k] += J[i][j] * J[i][k];
+                        }
+                        JTr[j] += J[i][j] * r[i];
+                    }
+                }
+
+                // Solve 3x3 system using Gaussian elimination
+                const delta = solve3x3(JTJ, JTr);
+                for (let i = 0; i < 3; i++) {
+                    newParams[i] = params[i] + delta[i];
+                }
+
+                if (Math.max(...delta.map(Math.abs)) < tolerance) break;
+                params = newParams;
+            }
+
+            const [a, n, b] = params;
+            return { a, n, b, predict: x => a * Math.pow(x + n, b) };
+        }
+
+        function fitShiftedPowerOffset(points) {
+            // Initial guess: a=1, n=0, b=1, m=0
+            let params = [1, 0, 1, 0];
+            const maxIterations = 100;
+            const tolerance = 1e-6;
+
+            for (let iter = 0; iter < maxIterations; iter++) {
+                let J = [], r = [], newParams = [];
+                for (const [x, y] of points) {
+                    const [a, n, b, m] = params;
+                    const pred = a * Math.pow(x + n, b) - m;
+                    const residual = y - pred;
+                    r.push(residual);
+
+                    // Partial derivatives
+                    const da = Math.pow(x + n, b);
+                    const dn = a * b * Math.pow(x + n, b - 1);
+                    const db = a * Math.pow(x + n, b) * Math.log(x + n + 1e-10);
+                    const dm = -1;
+                    J.push([da, dn, db, dm]);
+                }
+
+                // Solve J^T J delta = J^T r
+                const JTJ = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+                const JTr = [0, 0, 0, 0];
+                for (let i = 0; i < points.length; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        for (let k = 0; k < 4; k++) {
+                            JTJ[j][k] += J[i][j] * J[i][k];
+                        }
+                        JTr[j] += J[i][j] * r[i];
+                    }
+                }
+
+                const delta = solve4x4(JTJ, JTr);
+                for (let i = 0; i < 4; i++) {
+                    newParams[i] = params[i] + delta[i];
+                }
+
+                if (Math.max(...delta.map(Math.abs)) < tolerance) break;
+                params = newParams;
+            }
+
+            const [a, n, b, m] = params;
+            return { a, n, b, m, predict: x => a * Math.pow(x + n, b) - m };
+        }
+
+        function fitCubic(points) {
+            const n = points.length;
+            let A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+            let b = [0, 0, 0];
+
+            for (const [x, y] of points) {
+                A[0][0] += x ** 6;
+                A[0][1] += x ** 5;
+                A[0][2] += x ** 4;
+                A[1][0] += x ** 5;
+                A[1][1] += x ** 4;
+                A[1][2] += x ** 3;
+                A[2][0] += x ** 4;
+                A[2][1] += x ** 3;
+                A[2][2] += x ** 2;
+                b[0] += y * x ** 3;
+                b[1] += y * x ** 2;
+                b[2] += y * x;
+            }
+
+            const coeffs = solve3x3(A, b);
+            return { a: coeffs[0], b: coeffs[1], c: coeffs[2], predict: x => coeffs[0] * x ** 3 + coeffs[1] * x ** 2 + coeffs[2] * x };
+        }
+
+        function fitQuadratic(points) {
+            const n = points.length;
+            let A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+            let b = [0, 0, 0];
+
+            for (const [x, y] of points) {
+                A[0][0] += x ** 4;
+                A[0][1] += x ** 3;
+                A[0][2] += x ** 2;
+                A[1][0] += x ** 3;
+                A[1][1] += x ** 2;
+                A[1][2] += x;
+                A[2][0] += x ** 2;
+                A[2][1] += x;
+                A[2][2] += 1;
+                b[0] += y * x ** 2;
+                b[1] += y * x;
+                b[2] += y;
+            }
+
+            const coeffs = solve3x3(A, b);
+            return { a: coeffs[0], b: coeffs[1], c: coeffs[2], predict: x => coeffs[0] * x ** 2 + coeffs[1] * x + coeffs[2] };
+        }
+
+        function fitExpShift(points) {
+            // Initial guess: a=1, b=0
+            let params = [1, 0];
+            const maxIterations = 100;
+            const tolerance = 1e-6;
+
+            for (let iter = 0; iter < maxIterations; iter++) {
+                let J = [], r = [], newParams = [];
+                for (const [x, y] of points) {
+                    const [a, b] = params;
+                    const pred = Math.exp(a * x) + b;
+                    const residual = y - pred;
+                    r.push(residual);
+
+                    // Partial derivatives
+                    const da = x * Math.exp(a * x);
+                    const db = 1;
+                    J.push([da, db]);
+                }
+
+                // Solve J^T J delta = J^T r
+                const JTJ = [[0, 0], [0, 0]];
+                const JTr = [0, 0];
+                for (let i = 0; i < points.length; i++) {
+                    for (let j = 0; j < 2; j++) {
+                        for (let k = 0; k < 2; k++) {
+                            JTJ[j][k] += J[i][j] * J[i][k];
+                        }
+                        JTr[j] += J[i][j] * r[i];
+                    }
+                }
+
+                const delta = solve2x2(JTJ, JTr);
+                for (let i = 0; i < 2; i++) {
+                    newParams[i] = params[i] + delta[i];
+                }
+
+                if (Math.max(...delta.map(Math.abs)) < tolerance) break;
+                params = newParams;
+            }
+
+            const [a, b] = params;
+            return { a, b, predict: x => Math.exp(a * x) + b };
+        }
+
+        function solve2x2(A, b) {
+            const det = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+            if (Math.abs(det) < 1e-10) return [0, 0];
+            const x0 = (A[1][1] * b[0] - A[0][1] * b[1]) / det;
+            const x1 = (A[0][0] * b[1] - A[1][0] * b[0]) / det;
+            return [x0, x1];
+        }
+
+        function solve3x3(A, b) {
+            const det = A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1]) -
+                        A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0]) +
+                        A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]);
+            if (Math.abs(det) < 1e-10) return [0, 0, 0];
+
+            const invA = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+            invA[0][0] = (A[1][1] * A[2][2] - A[1][2] * A[2][1]) / det;
+            invA[0][1] = (A[0][2] * A[2][1] - A[0][1] * A[2][2]) / det;
+            invA[0][2] = (A[0][1] * A[1][2] - A[0][2] * A[1][1]) / det;
+            invA[1][0] = (A[1][2] * A[2][0] - A[1][0] * A[2][2]) / det;
+            invA[1][1] = (A[0][0] * A[2][2] - A[0][2] * A[2][0]) / det;
+            invA[1][2] = (A[0][2] * A[1][0] - A[1][2] * A[0][0]) / det;
+            invA[2][0] = (A[1][0] * A[2][1] - A[2][0] * A[1][1]) / det;
+            invA[2][1] = (A[0][1] * A[2][0] - A[0][0] * A[2][1]) / det;
+            invA[2][2] = (A[0][0] * A[1][1] - A[0][1] * A[1][0]) / det;
+
+            return [
+                invA[0][0] * b[0] + invA[0][1] * b[1] + invA[0][2] * b[2],
+                invA[1][0] * b[0] + invA[1][1] * b[1] + invA[1][2] * b[2],
+                invA[2][0] * b[0] + invA[2][1] * b[1] + invA[2][2] * b[2]
+            ];
+        }
+
+        function solve4x4(A, b) {
+            // Using Gaussian elimination for simplicity
+            let aug = A.map((row, i) => [...row, b[i]]);
+            for (let i = 0; i < 4; i++) {
+                let maxEl = Math.abs(aug[i][i]), maxRow = i;
+                for (let k = i + 1; k < 4; k++) {
+                    if (Math.abs(aug[k][i]) > maxEl) {
+                        maxEl = Math.abs(aug[k][i]);
+                        maxRow = k;
+                    }
+                }
+                [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
+                for (let k = i + 1; k < 4; k++) {
+                    const c = -aug[k][i] / aug[i][i];
+                    for (let j = i; j < 5; j++) {
+                        if (i === j) aug[k][j] = 0;
+                        else aug[k][j] += c * aug[i][j];
+                    }
+                }
+            }
+            let x = new Array(4).fill(0);
+            for (let i = 3; i >= 0; i--) {
+                x[i] = aug[i][4] / aug[i][i];
+                for (let k = i - 1; k >= 0; k--) {
+                    aug[k][4] -= aug[k][i] * x[i];
+                }
+            }
+            return x;
+        }
+
+        function displayResults(points, result) {
+            const resultsDiv = document.getElementById('results');
+            const equationResult = document.getElementById('equationResult');
+            const tableBody = document.getElementById('resultsTable').querySelector('tbody');
+            tableBody.innerHTML = '';
+
+            let equation;
+            switch (document.getElementById('equationType').value) {
+                case 'linear':
+                    equation = `y = ${result.a.toFixed(4)}x + ${result.b.toFixed(4)}`;
+                    break;
+                case 'exponential':
+                    equation = `y = ${result.a.toFixed(4)} * e^(${result.b.toFixed(4)}x)`;
+                    break;
+                case 'power':
+                    equation = `y = ${result.a.toFixed(4)} * x^${result.b.toFixed(4)}`;
+                    break;
+                case 'hyperbolic':
+                    equation = `y = ${result.n.toFixed(4)} / (${result.a.toFixed(4)}x + ${result.b.toFixed(4)})`;
+                    break;
+                case 'shiftedPower':
+                    equation = `y = ${result.a.toFixed(4)} * (x + ${result.n.toFixed(4)})^${result.b.toFixed(4)}`;
+                    break;
+                case 'shiftedPowerOffset':
+                    equation = `y = ${result.a.toFixed(4)} * (x + ${result.n.toFixed(4)})^${result.b.toFixed(4)} - ${result.m.toFixed(4)}`;
+                    break;
+                case 'cubic':
+                    equation = `y = ${result.a.toFixed(4)}x^3 + ${result.b.toFixed(4)}x^2 + ${result.c.toFixed(4)}x`;
+                    break;
+                case 'quadratic':
+                    equation = `y = ${result.a.toFixed(4)}x^2 + ${result.b.toFixed(4)}x + ${result.c.toFixed(4)}`;
+                    break;
+                case 'expShift':
+                    equation = `y = e^(${result.a.toFixed(4)}x) + ${result.b.toFixed(4)}`;
+                    break;
+            }
+
+            equationResult.textContent = `Equation: ${equation}`;
+            for (const [x, y] of points) {
+                const yPred = result.predict(x);
+                const error = Math.abs(y - yPred);
+                const row = `<tr>
+                    <td>${x.toFixed(4)}</td>
+                    <td>${y.toFixed(4)}</td>
+                    
+                </tr>`;
+                tableBody.innerHTML += row;
+            }
+
+            resultsDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

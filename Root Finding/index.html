@@ -1,0 +1,812 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Finding Methods</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.0.0/math.min.js"></script>
+    <style>
+       
+        .card {
+           
+            padding: 20px;
+            width: 90%;
+            max-width: 550px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 20px auto;
+            background-color: #000;
+            color: #fff;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 20px;
+            color: #fff;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .methods {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .method-btn {
+            background-color: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.3s;
+        }
+
+        .method-btn:hover {
+            background-color: #e0e0e0;
+        }
+
+        .method-btn.active {
+            background-color: #e0e0e0;
+            font-weight: bold;
+        }
+
+        .input-section {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button.calculate {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button.calculate:hover {
+            background-color: #45a049;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+            display: none;
+            color: #000;
+        }
+
+        .syntax-help {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+            background-color: #000;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: center;
+            color: #fff;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            color: #000;
+        }
+
+        .toggle-table {
+            color: #4CAF50;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .iteration-table {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .sign-check {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .sign-valid {
+            background-color: #e6f7e6;
+            color: #2e7d32;
+        }
+
+        .sign-invalid {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(0,0,0,.3);
+            border-radius: 50%;
+            border-top-color: #000;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 5px;
+        }
+
+        .auto-fill-btn {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .auto-fill-btn:hover {
+            background-color: #0b7dda;
+        }
+
+        .function-graph {
+            width: 100%;
+            height: 200px;
+            margin-top: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            table {
+                font-size: 10px;
+            }
+            th, td {
+                padding: 4px;
+            }
+        }
+        body{
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>ROOT FINDING</h2>
+        <div class="methods">
+            <button class="method-btn" data-method="secant">Secant Method</button>
+            <button class="method-btn" data-method="bisection">Bisection Method</button>
+        </div>
+
+        <div id="secant-input" class="input-section">
+            <h3>Secant Method</h3>
+            <div class="input-group">
+                <label for="secant-function">Function:</label>
+                <input type="text" id="secant-function" placeholder="e.g., sin(x) + x^2 - 5" oninput="autoRecommendSecantValues()">
+                <div class="syntax-help">Supports: +, -, *, /, ^, sin(), cos(), tan(), ln(), log(), sqrt(), e, pi</div>
+                <button class="auto-fill-btn" onclick="autoFillSecantValues()">Auto-fill positive values</button>
+            </div>
+            <div class="input-group">
+                <label for="secant-x0">Initial guess x0:</label>
+                <input type="number" id="secant-x0" placeholder="1" step="any">
+            </div>
+            <div class="input-group">
+                <label for="secant-x1">Initial guess x1:</label>
+                <input type="number" id="secant-x1" placeholder="2" step="any">
+            </div>
+            <div class="input-group">
+                <label for="secant-tolerance">Tolerance:</label>
+                <input type="number" id="secant-tolerance" placeholder="0.0001" step="any" min="0" value="0.0001">
+            </div>
+            <button class="calculate" onclick="calculateSecant()">Calculate</button>
+            <div id="secant-result" class="result"></div>
+            <div id="secant-table" class="iteration-table"></div>
+        </div>
+
+        <div id="bisection-input" class="input-section">
+            <h3>Bisection Method</h3>
+            <div class="input-group">
+                <label for="bisection-function">Function:</label>
+                <input type="text" id="bisection-function" placeholder="e.g., x*tan(x) - 2" oninput="checkBisectionInterval(); autoRecommendBisectionValues()">
+                <div class="syntax-help">Supports: +, -, *, /, ^, sin(), cos(), tan(), ln(), log(), sqrt(), e, pi</div>
+                <button class="auto-fill-btn" onclick="autoFillBisectionValues()">Auto-fill positive interval</button>
+            </div>
+            <div class="input-group">
+                <label for="bisection-a">Interval start (a):</label>
+                <input type="number" id="bisection-a" placeholder="1" step="any" oninput="checkBisectionInterval()">
+            </div>
+            <div class="input-group">
+                <label for="bisection-b">Interval end (b):</label>
+                <input type="number" id="bisection-b" placeholder="3" step="any" oninput="checkBisectionInterval()">
+            </div>
+            <div id="bisection-sign-check" class="sign-check" style="display:none">
+                Checking interval validity...
+            </div>
+            <div class="input-group">
+                <label for="bisection-tolerance">Tolerance:</label>
+                <input type="number" id="bisection-tolerance" placeholder="0.0001" step="any" min="0" value="0.0001">
+            </div>
+            <button class="calculate" onclick="calculateBisection()">Calculate</button>
+            <div id="bisection-result" class="result"></div>
+            <div id="bisection-table" class="iteration-table"></div>
+        </div>
+    </div>
+
+    <script>
+        // Show the selected method's input section
+        document.querySelectorAll('.method-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const method = this.getAttribute('data-method');
+                
+                // Update active button styles
+                document.querySelectorAll('.method-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                this.classList.add('active');
+                
+                // Hide all input sections
+                document.querySelectorAll('.input-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                // Hide all results and tables
+                document.querySelectorAll('.result, .iteration-table').forEach(el => {
+                    el.style.display = 'none';
+                });
+                
+                // Show the selected input section
+                document.getElementById(`${method}-input`).style.display = 'block';
+                
+                // Auto recommend values for visible method
+                if (method === 'secant') {
+                    autoRecommendSecantValues();
+                } else if (method === 'bisection') {
+                    autoRecommendBisectionValues();
+                }
+            });
+        });
+
+        function evaluateFunction(funcStr, x) {
+            try {
+                // Use math.js to safely evaluate the expression
+                math.config({ number: 'number' });
+                const node = math.parse(funcStr);
+                const code = node.compile();
+                return code.evaluate({ x, e: Math.E, pi: Math.PI });
+            } catch (error) {
+                console.error('Evaluation error:', error);
+                return NaN;
+            }
+        }
+
+        function validateInputs(funcStr, numbers) {
+            if (!funcStr || numbers.some(n => isNaN(n))) {
+                return false;
+            }
+            // Basic syntax check for function
+            try {
+                math.parse(funcStr);
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        // Toggle table visibility
+        function toggleTable(tableId) {
+            const table = document.getElementById(tableId);
+            table.style.display = table.style.display === 'block' ? 'none' : 'block';
+        }
+
+        // Auto recommend values for Secant method
+        function autoRecommendSecantValues() {
+            const funcStr = document.getElementById('secant-function').value;
+            if (!funcStr) return;
+            
+            try {
+                // Validate function
+                math.parse(funcStr);
+                
+                // Find suitable initial values for secant method
+                findPositiveSecantValues(funcStr);
+            } catch (error) {
+                console.log('Invalid function for auto recommendation:', error);
+            }
+        }
+
+        // Find good positive values for Secant method
+        function findPositiveSecantValues(funcStr) {
+            const testPoints = [0.1, 0.5, 1, 2, 3, 5, 10, 20, 50];
+            let foundInterval = false;
+            let x0 = 0.5;
+            let x1 = 5;
+            
+            // Try to find points with different function values
+            for (let i = 0; i < testPoints.length - 1; i++) {
+                for (let j = i + 1; j < testPoints.length; j++) {
+                    const p1 = testPoints[i];
+                    const p2 = testPoints[j];
+                    const f1 = evaluateFunction(funcStr, p1);
+                    const f2 = evaluateFunction(funcStr, p2);
+                    
+                    if (!isNaN(f1) && !isNaN(f2) && f1 * f2 <= 0) {
+                        x0 = p1;
+                        x1 = p2;
+                        foundInterval = true;
+                        break;
+                    }
+                }
+                if (foundInterval) break;
+            }
+            
+            // Store these values as data attributes
+            const funcElement = document.getElementById('secant-function');
+            funcElement.dataset.suggestedX0 = x0;
+            funcElement.dataset.suggestedX1 = x1;
+            
+            console.log(`Suggested secant values: x0=${x0}, x1=${x1}`);
+        }
+
+        // Auto fill Secant values
+        function autoFillSecantValues() {
+            const funcStr = document.getElementById('secant-function').value;
+            if (!funcStr) {
+                alert('Please enter a function first');
+                return;
+            }
+            
+            // Get suggested values or use defaults
+            const funcElement = document.getElementById('secant-function');
+            const x0 = parseFloat(funcElement.dataset.suggestedX0 || 0.5);
+            const x1 = parseFloat(funcElement.dataset.suggestedX1 || 5);
+            
+            document.getElementById('secant-x0').value = x0;
+            document.getElementById('secant-x1').value = x1;
+            
+            console.log(`Auto-filled secant values: x0=${x0}, x1=${x1}`);
+        }
+
+        // Auto recommend values for Bisection method
+        function autoRecommendBisectionValues() {
+            const funcStr = document.getElementById('bisection-function').value;
+            if (!funcStr) return;
+            
+            try {
+                // Validate function
+                math.parse(funcStr);
+                
+                // Auto suggest values but don't fill yet
+                findPositiveBisectionInterval(funcStr);
+            } catch (error) {
+                console.log('Invalid function for auto recommendation');
+            }
+        }
+
+        // Find good positive interval for Bisection method
+        function findPositiveBisectionInterval(funcStr) {
+            const testPoints = [0.1, 0.5, 1, 2, 3, 5, 10, 20, 50];
+            let foundInterval = false;
+            let a = 0.5;
+            let b = 5;
+            
+            // Try to find points with opposite signs
+            for (let i = 0; i < testPoints.length - 1; i++) {
+                for (let j = i + 1; j < testPoints.length; j++) {
+                    const p1 = testPoints[i];
+                    const p2 = testPoints[j];
+                    const f1 = evaluateFunction(funcStr, p1);
+                    const f2 = evaluateFunction(funcStr, p2);
+                    
+                    if (!isNaN(f1) && !isNaN(f2) && f1 * f2 <= 0) {
+                        a = p1;
+                        b = p2;
+                        foundInterval = true;
+                        break;
+                    }
+                }
+                if (foundInterval) break;
+            }
+            
+            // Store these values as data attributes
+            const funcElement = document.getElementById('bisection-function');
+            funcElement.dataset.suggestedA = a;
+            funcElement.dataset.suggestedB = b;
+            
+            console.log(`Suggested bisection interval: [${a}, ${b}]`);
+        }
+
+        // Auto fill Bisection values
+        function autoFillBisectionValues() {
+            const funcStr = document.getElementById('bisection-function').value;
+            if (!funcStr) {
+                alert('Please enter a function first');
+                return;
+            }
+            
+            // Get suggested values or use defaults
+            const funcElement = document.getElementById('bisection-function');
+            const a = parseFloat(funcElement.dataset.suggestedA || 0.5);
+            const b = parseFloat(funcElement.dataset.suggestedB || 5);
+            
+            document.getElementById('bisection-a').value = a;
+            document.getElementById('bisection-b').value = b;
+            
+            // Check interval validity after auto-fill
+            checkBisectionInterval();
+        }
+
+        // Secant Method Calculation with modified iteration table
+        function calculateSecant() {
+            const funcStr = document.getElementById('secant-function').value;
+            let x0 = parseFloat(document.getElementById('secant-x0').value);
+            let x1 = parseFloat(document.getElementById('secant-x1').value);
+            const tolerance = parseFloat(document.getElementById('secant-tolerance').value);
+            const resultDiv = document.getElementById('secant-result');
+            const tableDiv = document.getElementById('secant-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            // If inputs are not provided or invalid, auto-fill them
+            if (isNaN(x0) || isNaN(x1)) {
+                autoFillSecantValues();
+                x0 = parseFloat(document.getElementById('secant-x0').value);
+                x1 = parseFloat(document.getElementById('secant-x1').value);
+            }
+            
+            if (!validateInputs(funcStr, [x0, x1, tolerance])) {
+                alert('Please provide valid function and numerical inputs.');
+                return;
+            }
+            
+            // Show loading state
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                let iterations = 0;
+                let x2, f0, f1, error;
+                const maxIterations = 100;
+                let tableHTML = '<table><tr><th>Iteration</th><th>x0</th><th>x1</th><th>f(x0)</th><th>f(x1)</th></tr>';
+                
+                let currentX0 = x0;
+                let currentX1 = x1;
+                
+                do {
+                    f0 = evaluateFunction(funcStr, currentX0);
+                    f1 = evaluateFunction(funcStr, currentX1);
+                    
+                    if (isNaN(f0) || isNaN(f1)) {
+                        resultDiv.innerHTML = 'Error: Could not evaluate the function. Check your syntax.';
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    if (Math.abs(f1 - f0) < 1e-10) {
+                        tableHTML += '</table>';
+                        tableDiv.innerHTML = tableHTML;
+                        resultDiv.innerHTML = `Error: Denominator too small - possible division by zero.<br>
+                            <span class="toggle-table" onclick="toggleTable('secant-table')">Show iteration table</span>`;
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    x2 = currentX1 - f1 * (currentX1 - currentX0) / (f1 - f0);
+                    const f2 = evaluateFunction(funcStr, x2);
+                    error = Math.abs(x2 - currentX1);
+                    
+                    tableHTML += `<tr>
+                        <td>${iterations}</td>
+                        <td>${currentX0.toFixed(6)}</td>
+                        <td>${currentX1.toFixed(6)}</td>
+                        <td>${f0.toExponential(4)}</td>
+                        <td>${f1.toExponential(4)}</td>
+                    </tr>`;
+                    
+                    currentX0 = currentX1;
+                    currentX1 = x2;
+                    iterations++;
+                    
+                    if (iterations >= maxIterations) {
+                        tableHTML += '</table>';
+                        tableDiv.innerHTML = tableHTML;
+                        resultDiv.innerHTML = `Reached maximum iterations (${maxIterations}). Last approximation: ${x2.toFixed(6)}<br>
+                            <span class="toggle-table" onclick="toggleTable('secant-table')">Show iteration table</span>`;
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                } while (error > tolerance);
+                
+                tableHTML += '</table>';
+                tableDiv.innerHTML = tableHTML;
+                
+                const finalF = evaluateFunction(funcStr, x2);
+                
+                resultDiv.innerHTML = `
+                    <strong>Root found:</strong> ${x2.toFixed(6)}<br>
+                    <strong>Iterations:</strong> ${iterations}<br>
+                    <span class="toggle-table" onclick="toggleTable('secant-table')">Show iteration table</span>
+                `;
+                resultDiv.style.display = 'block';
+            }, 10);
+        }
+
+        // Check bisection interval validity
+        function checkBisectionInterval() {
+            const funcStr = document.getElementById('bisection-function').value;
+            const a = parseFloat(document.getElementById('bisection-a').value);
+            const b = parseFloat(document.getElementById('bisection-b').value);
+            const signCheckDiv = document.getElementById('bisection-sign-check');
+            
+            if (!funcStr || isNaN(a) || isNaN(b)) {
+                signCheckDiv.style.display = 'none';
+                return;
+            }
+            
+            const fa = evaluateFunction(funcStr, a);
+            const fb = evaluateFunction(funcStr, b);
+            
+            if (isNaN(fa) || isNaN(fb)) {
+                signCheckDiv.style.display = 'none';
+                return;
+            }
+            
+            signCheckDiv.style.display = 'block';
+            
+            if (fa * fb < 0) {
+                signCheckDiv.className = 'sign-check sign-valid';
+                signCheckDiv.innerHTML = `Valid interval: f(${a}) = ${fa.toFixed(4)}, f(${b}) = ${fb.toFixed(4)} (opposite signs)`;
+            } else {
+                signCheckDiv.className = 'sign-check sign-invalid';
+                signCheckDiv.innerHTML = `Warning: f(${a}) = ${fa.toFixed(4)}, f(${b}) = ${fb.toFixed(4)} (same signs)`;
+            }
+        }
+
+        // Enhanced Bisection Method with auto-interval search
+        function calculateBisection() {
+            const funcStr = document.getElementById('bisection-function').value;
+            let a = parseFloat(document.getElementById('bisection-a').value);
+            let b = parseFloat(document.getElementById('bisection-b').value);
+            const tolerance = parseFloat(document.getElementById('bisection-tolerance').value);
+            const resultDiv = document.getElementById('bisection-result');
+            const tableDiv = document.getElementById('bisection-table');
+            
+            resultDiv.style.display = 'none';
+            tableDiv.style.display = 'none';
+            
+            // If inputs are not provided or invalid, auto-fill them
+            if (isNaN(a) || isNaN(b)) {
+                autoFillBisectionValues();
+                a = parseFloat(document.getElementById('bisection-a').value);
+                b = parseFloat(document.getElementById('bisection-b').value);
+            }
+            
+            if (!validateInputs(funcStr, [a, b, tolerance])) {
+                alert('Please provide valid function and numerical inputs.');
+                return;
+            }
+            
+            // Show loading state
+            resultDiv.innerHTML = 'Calculating... <span class="loading"></span>';
+            resultDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                let fa = evaluateFunction(funcStr, a);
+                let fb = evaluateFunction(funcStr, b);
+                
+                if (isNaN(fa) || isNaN(fb)) {
+                    resultDiv.innerHTML = 'Error: Could not evaluate the function. Check your syntax.';
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+                
+                // Auto interval search if signs are same
+                let intervalFound = fa * fb < 0;
+                const originalA = a;
+                const originalB = b;
+                
+                if (!intervalFound) {
+                    resultDiv.innerHTML = `Searching for valid interval... <span class="loading"></span>`;
+                    resultDiv.style.display = 'block';
+                    
+                    const searchStep = (b - a) / 10;
+                    let searchIterations = 0;
+                    const maxSearchIterations = 20;
+                    
+                    while (searchIterations < maxSearchIterations && !intervalFound) {
+                        b += searchStep;
+                        fb = evaluateFunction(funcStr, b);
+                        
+                        if (fa * fb < 0) {
+                            intervalFound = true;
+                            break;
+                        }
+                        
+                        a -= searchStep;
+                        // Ensure a doesn't go too negative
+                        if (a < -100) a = -100;
+                        fa = evaluateFunction(funcStr, a);
+                        
+                        if (fa * fb < 0) {
+                            intervalFound = true;
+                            break;
+                        }
+                        
+                        searchIterations++;
+                    }
+                    
+                    if (!intervalFound) {
+                        // Try a broader search range
+                        a = -50;
+                        b = 50;
+                        fa = evaluateFunction(funcStr, a);
+                        fb = evaluateFunction(funcStr, b);
+                        
+                        if (fa * fb < 0) {
+                            intervalFound = true;
+                        } else {
+                            resultDiv.innerHTML = `Could not find valid interval after ${maxSearchIterations} attempts.<br>
+                                Original interval: [${originalA}, ${originalB}]<br>
+                                f(${originalA}) = ${evaluateFunction(funcStr, originalA).toFixed(4)}, 
+                                f(${originalB}) = ${evaluateFunction(funcStr, originalB).toFixed(4)}<br>
+                                Try different initial values.`;
+                            resultDiv.style.display = 'block';
+                            return;
+                        }
+                    }
+                    
+                    // Update the visible input fields with the found interval
+                    document.getElementById('bisection-a').value = a;
+                    document.getElementById('bisection-b').value = b;
+                    resultDiv.innerHTML = ''; // Clear loading message
+                }
+                
+                let iterations = 0;
+                let c, fc;
+                const maxIterations = 100;
+                let tableHTML = '<table><tr><th>Iteration</th><th>a</th><th>b</th><th>c</th><th>f(c)</th></tr>';
+                
+                do {
+                    c = (a + b) / 2;
+                    fc = evaluateFunction(funcStr, c);
+                    
+                    if (isNaN(fc)) {
+                        resultDiv.innerHTML = 'Error: Could not evaluate the function at midpoint';
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                    
+                    tableHTML += `<tr>
+                        <td>${iterations}</td>
+                        <td>${a.toFixed(6)}</td>
+                        <td>${b.toFixed(6)}</td>
+                        <td>${c.toFixed(6)}</td>
+                        <td>${fc.toExponential(4)}</td>
+                    </tr>`;
+                    
+                    if (Math.abs(fc) < tolerance) {
+                        break;
+                    } else if (fa * fc < 0) {
+                        b = c;
+                        fb = fc;
+                    } else {
+                        a = c;
+                        fa = fc;
+                    }
+                    
+                    iterations++;
+                    
+                    if (iterations >= maxIterations) {
+                        tableHTML += '</table>';
+                        tableDiv.innerHTML = tableHTML;
+                        resultDiv.innerHTML = `Reached maximum iterations (${maxIterations}). Last approximation: ${c.toFixed(6)}<br>
+                            <span class="toggle-table" onclick="toggleTable('bisection-table')">Show iteration table</span>`;
+                        resultDiv.style.display = 'block';
+                        return;
+                    }
+                } while ((b - a) / 2 > tolerance);
+                
+                tableHTML += '</table>';
+                tableDiv.innerHTML = tableHTML;
+                
+                resultDiv.innerHTML = `
+                    <strong>Root found:</strong> ${c.toFixed(6)}<br>
+                    <strong>Iterations:</strong> ${iterations}<br>
+                    <span class="toggle-table" onclick="toggleTable('bisection-table')">Show iteration table</span>
+                `;
+                resultDiv.style.display = 'block';
+                checkBisectionInterval();
+            }, 10);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Show the first method by default
+            document.querySelector('.method-btn[data-method="secant"]').click();
+            
+            // Add event listeners for bisection interval check
+            document.getElementById('bisection-function').addEventListener('input', checkBisectionInterval);
+            document.getElementById('bisection-a').addEventListener('input', checkBisectionInterval);
+            document.getElementById('bisection-b').addEventListener('input', checkBisectionInterval);
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93d25e2688c653d0',t:'MTc0NjgwNTk4Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
